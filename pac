@@ -114,8 +114,10 @@ EOF
 pac() {
   if [ "${PAC_USE_AUR}" ]; then # if it's set...
     local PACMAN_COMMAND=${PACMAN_COMMAND:-yay}
+    local CHECKUPDATES_COMMAND=${CHECKUPDATES_COMMAND:-checkupdates+aur}
   else
     local PACMAN_COMMAND=${PACMAN_COMMAND:-pacman}
+    local CHECKUPDATES_COMMAND=${CHECKUPDATES_COMMAND:-checkupdates}
   fi
   case $PACMAN_COMMAND in
     yay)
@@ -229,10 +231,36 @@ pac() {
       ;;
     outdated | stale)
       # note: this is SAFE in that it does NOT update the main local package db to get this information,
-      # thus avoiding the warnings mentioned above
-      needs checkupdates provided by pacman-contrib
-      [ "$PAC_MUTE_CMD_ECHO" ] || echo_yellow "checkupdates"
-      checkupdates || echo "Up to date."
+      # thus avoiding the warnings mentioned above.
+      # Also, this currently doesn't return a particular exit code if there aren't any updates,
+      # but the underlying "checkupdates" (as well as checkupdates+aur BUT NOT checkupdates-aur), does exit 2.
+      # Should it?
+      if [ "${PAC_USE_AUR}" ]; then
+        needs checkupdates+aur from the AUR
+      else
+        needs checkupdates provided by pacman-contrib
+      fi
+      [ "$PAC_MUTE_CMD_ECHO" ] || echo_yellow $CHECKUPDATES_COMMAND
+      # This causes it to also ignore ignored packages or groups (pacman and yay already ignore them when updating).
+      # Basically, I convert the list of ignore names into a regex that then gets used as a grep -v (exclusion) filter.
+      local ignored_pkgs=`egrep '^Ignore(Pkg|Group) *=' /etc/pacman.conf | awk '{for(i=3;i<=NF;++i)print $i}' | sort`
+      local checked_updates=`$CHECKUPDATES_COMMAND | sort`
+      if [ "$ignored_pkgs" ]; then
+        local ignored_pkgs_to_regex=`echo -e "$ignored_pkgs" | xargs | sed -E 's/[[:space:]]+/\|/g'`
+      else
+        local ignored_pkgs_to_regex=""
+      fi
+      if [ "${ignored_pkgs_to_regex}" ]; then
+        ignored_pkgs_to_regex="^($ignored_pkgs_to_regex)"
+      fi
+      local update_filter="${ignored_pkgs_to_regex}"
+      if [ "$update_filter" ]; then
+        local filtered_updates=`echo -en "$checked_updates" | egrep -v "$update_filter" -`
+      else
+        local filtered_updates="$checked_updates"
+      fi
+      # update_list=`comm -23 <($CHECKUPDATES_COMMAND | awk '{print $1}' | sort) <(egrep '^Ignore(Pkg|Group) *=' /etc/pacman.conf | awk '{for(i=3;i<=NF;++i)print $i}' | sort)`
+      { [ "$filtered_updates" ] && echo "$filtered_updates"; } || echo "Up to date."
       ;;
     deptree)
       needs pactree provided by pacman-contrib
