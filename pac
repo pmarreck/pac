@@ -15,7 +15,9 @@ needs() {
 # ANSI coloring
 # Color constants
 export ANSI="\033["
+export TXTRED='0;31m' # Red
 export TXTYLW='0;33m' # Yellow
+export TXTGRN='0;32m' # Green
 export TXTRST='0m'    # Text Reset, disable coloring
 echo_yellow() {
   echo -e "${ANSI}${TXTYLW}${1}${ANSI}${TXTRST}"
@@ -43,6 +45,12 @@ Configuration:
       Set PAC_MUTE_CMD_ECHO env variable to stop pac from printing out the underlying command it will run before it runs it.
 
 Usage: 
+      pac
+      -- With nothing after it, lists the options (a condensed version of this help).
+
+      pac --help | -h | help
+      -- This help screen.
+
       pac install | i | upgrade | update | up | system_upgrade | su [--force-refresh] [<packagename>]
       -- These are all essentially synonyms.
          Updates the local package db, upgrades local packages, then optionally installs a package.
@@ -111,6 +119,30 @@ Usage:
 EOF
 }
 
+_pac_opts() {
+  cat << EOF
+      ENV vars that affect behavior when set: PAC_USE_AUR, PAC_MUTE_CMD_ECHO
+      Options:
+      pac --help | -h | help
+      pac install | i | upgrade | update | up | system_upgrade | su [--force-refresh] [<packagename>]
+      pac uninstall | u | remove | r [--orphaned | --gone] [<packagename>]
+      pac orphaned | o
+      pac list | l
+      pac inspect | info <packagename>
+      pac files <packagename>
+      pac owns <path/to/file>
+      pac search | s | query | q | find | f [--local | --remote] <expression> # --remote is default
+      pac clean | c | purge
+      pac outdated | stale
+      pac deptree <packagename>
+      pac needed_by | deps [--flat | --unique] <packagename>
+      pac needs | depends_on [--flat | --unique] <packagename>
+      pac valid[ate] <packagename>
+      pac unlock
+      pac doc[tor]
+EOF
+}
+
 pac() {
   if [ "${PAC_USE_AUR}" ]; then # if it's set...
     local PACMAN_COMMAND=${PACMAN_COMMAND:-yay}
@@ -121,7 +153,7 @@ pac() {
   fi
   case $PACMAN_COMMAND in
     yay)
-      [ "$PAC_MUTE_CMD_ECHO" ] || echo_yellow "Including the AUR..."
+      # [ "$PAC_MUTE_CMD_ECHO" ] || echo_yellow "Including the AUR..."
       needs yay "run: pacman -S --needed git base-devel yay"
       ;;
     pacman)
@@ -322,8 +354,11 @@ pac() {
       [ "$PAC_MUTE_CMD_ECHO" ] || echo_yellow "[ -f /var/lib/pacman/db.lck ]"
       [ -f /var/lib/pacman/db.lck ] && echo "The pacman package DB is locked. If you're not currently running pac/pacman, run 'sudo pac unlock'."
       ;;
-    *)
+    --help | -h | help)
       _pac_help
+      ;;
+    *)
+      _pac_opts
       ;;
   esac
 }
@@ -331,7 +366,7 @@ pac() {
 # run the function, passing along any args, if this file was run directly (such as via sudo) instead of as an include
 # sometimes, $0 contains a leading dash to indicate an interactive (or is it login?) shell,
 # which is apparently an old convention (which also broke the basename call on OS X)
-me=$(basename ${0##\-})
+me=$( basename ${0##\-} )
 if [ "$me" = "pac" ]; then
   pac $*
 fi
